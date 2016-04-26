@@ -11,9 +11,9 @@ my $dirname = dirname(__FILE__);
 
 
 # Zkillboard Endpoints
-my $zkAllyUrl = "https://zkillboard.com/api/allianceID/";
-my $zkCorpUrl = "https://zkillboard.com/api/corporation/";
+my $zkSystemUrl = "https://zkillboard.com/api/solarSystemID/";
 my $zkKillUrl = 'https://zkillboard.com/api/killID/';
+
 # Zkillboard options
 my @zkOptions = ("no-items","no-attackers");
 my @zkKillOptions = ("no-items");
@@ -23,9 +23,8 @@ my @zkKillOptions = ("no-items");
 my $lastFile = $dirname."/z2s.last";
 my $confFile = $dirname."/z2s.conf";
 my @arrayLastKills;
-# mode : 1 (Ally), 2 (Corp)
-my $mode = 2;
-my $entityId = 1390846542;
+
+my $systemID = 100;
 my $nbKeptKills = 30;
 my $thousandDelimiter = " ";
 
@@ -34,7 +33,7 @@ my $thousandDelimiter = " ";
 my %listOfShips = ();
 my $itemname_File = $dirname."/itemname.csv";
 
-# Eve Online CREST Endpoint
+# Eve Online CREST Type Endpoint
 my $CRESTUrl = "https://public-crest.eveonline.com/types/?page=";
 
 # User agent
@@ -42,12 +41,11 @@ my $userAgent = "Z2s Bot - Author : Alyla By - laby \@laby.fr";
 
 # Slack config
 my $slack_URL = 'https://hooks.slack.com/services/CCC/BBB/AAA';
-my $slack_Channel = '#killmails';
+my $slack_Channel = '#homefinding';
 my $slack_Username = 'z2s';
 my $slack_icon = ':ghost:';
 
 my $timeout = 120;
-
 
 
 readConfFile();
@@ -55,25 +53,18 @@ readKillFile();
 checkForNewKills();
 writeKillFile();
 
-
 exit;
 
 sub readConfFile
 {
 	open(my $fh, "<", $confFile) or die "Could not open file '$confFile' $!";
+
 	for(<$fh>)
 	{
-		if ( /mode=([0-9]*)\n/ )
+
+		if ( /systemID=([0-9]*)\n/ )
 		{
-			$mode = $1;
-		}
-		if ( /corporationID=([0-9]*)\n/ )
-		{
-			$entityId = $1;
-		}
-		if ( /allianceID=([0-9]*)\n/ )
-		{
-			$entityId = $1;
+			$systemID = $1;
 		}
 		if ( /thousandDelimiter=(.*)\n/ )
 		{
@@ -92,6 +83,8 @@ sub readConfFile
 			$slack_Channel = $1;
 		}
 	}
+	
+	
 }
 
 sub readKillFile
@@ -165,19 +158,8 @@ sub buildUrlCheckKills
 {
 	my $url;
 
-	# Ally or Corporation URL
-	if ( $mode == 1)
-	{
-		$url = $zkAllyUrl.$entityId;
-	}
-	elsif ( $mode == 2)
-	{
-		$url = $zkCorpUrl.$entityId;
-	}
-	else
-	{
-		return;
-	}
+	$url = $zkSystemUrl.$systemID;
+	#print $url;
 
 	# Kill we use as reference
 	my $firstKillId = $arrayLastKills[0];
@@ -276,33 +258,25 @@ sub generateSlackMessage
 	my @attackers = @{ $hUnref{'attackers'} };
 
 	my $numberAttackers = 0;
-	my $entityName;
+	
 	for(@attackers)
 	{
-		my %hashAttacker = %{$_};
-		if (( ($mode == 1)&&($hashAttacker{'allianceID'} == $entityId) ) or ( ($mode == 2)&&($hashAttacker{'corporationID'} == $entityId) ))
-		{
-			$entityName = $hashAttacker{'corporationName'} || $hashAttacker{'allianceName'};
-			$numberAttackers++;
-		}
+		$numberAttackers++;
 	}
+	
 	if ($numberAttackers == 0)
 	{
 		$numberAttackers = scalar @attackers;
 	}
-
+	
 	my $lossValue = formatNumber($hUnref{'zkb'}{'totalValue'});
 	my $victimID = $hUnref{'victim'}{'characterID'};
 	my $victimName = $hUnref{'victim'}{'characterName'};
 	my $victimCorp = $hUnref{'victim'}{'corporationName'};
-	my $victimCorpID = $hUnref{'victim'}{'corporationID'};
-	my $victimAlly = $hUnref{'victim'}{'allianceName'};
-	my $victimAllyID = $hUnref{'victim'}{'allianceID'};
-	
 	my $victimShip = $hUnref{'victim'}{'shipTypeID'};
+	my $killSystemID = $hUnref{'solarSystemID'};
 
 	my $killURL = 'https://zkillboard.com/kill/'.$killId;
-
 	my $victimURL = 'https://zkillboard.com/character/'.$victimID;
 
 	my $msg;
@@ -318,15 +292,8 @@ sub generateSlackMessage
 		$msg = $msg.' pilot';
 	}
 
-	# Ally 
-	if ( $victimAllyID ne $entityId and $victimCorpID ne $entityId )
-	{
-		$msg = $msg." from $entityName killed ";
-	}
-	else
-	{
-		$msg = $msg.' killed ';
-	}
+	$msg = $msg.' killed ';
+
 
 	#ship name
 	my $shipName = getShipName($victimShip);
@@ -342,8 +309,6 @@ sub generateSlackMessage
 
 
 	return $msg;
-
-
 
 }
 sub getShipName
@@ -450,7 +415,7 @@ sub appendItemFile
 sub sendToSlack
 {
 	my ($msg) = @_;
-	print $msg;
+	#print $msg;
 	my $ua = LWP::UserAgent->new;
 	my $req = HTTP::Request->new(POST => $slack_URL);
 	$ua->agent("Z2s Bot - Author : Alyla By - laby \@laby.fr");
